@@ -69,6 +69,7 @@
         </header>
 
         <section class="mt-4 px-5">
+            <!-- KPI Container: Monthly, Yearly, Total -->
             <div class="flex gap-4 overflow-x-auto pb-4 snap-x mandatory hide-scrollbar" id="kpi-container">
                 <!-- Rendered by JS -->
             </div>
@@ -432,47 +433,74 @@
             const renderDashboard = () => {
                 const subs = state.subscriptions;
                 // Calculations
-                const sums = {};
+                const sums = { monthly: {}, yearly: {} };
                 let activeCount = 0;
+                
                 subs.forEach(s => {
                     const price = parseFloat(s.price) || 0;
-                    const currency = s.currency || 'USD';
-                    if (!sums[currency]) sums[currency] = 0;
+                    const currency = s.currency || 'KRW';
                     
-                    let monthlyPrice = s.billingCycle === 'yearly' ? price / 12 : price;
-                    sums[currency] += monthlyPrice;
+                    if (!sums.monthly[currency]) sums.monthly[currency] = 0;
+                    if (!sums.yearly[currency]) sums.yearly[currency] = 0;
+                    
+                    let monthlyVal = s.billingCycle === 'yearly' ? price / 12 : price;
+                    let yearlyVal = s.billingCycle === 'yearly' ? price : price * 12;
+
+                    sums.monthly[currency] += monthlyVal;
+                    sums.yearly[currency] += yearlyVal;
                     activeCount++;
                 });
 
-                // 1. KPI Cards
-                let kpiHTML = '';
-                // Spend Card
-                const primaryCurrency = Object.keys(sums)[0] || 'KRW';
-                const totalSpend = (sums[primaryCurrency] || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+                // Determine primary currency
+                const currencies = Object.keys(sums.monthly);
+                const primaryCurrency = currencies.length > 0 ? currencies[0] : 'KRW';
                 const symbol = primaryCurrency === 'KRW' ? '₩' : primaryCurrency === 'USD' ? '$' : primaryCurrency === 'EUR' ? '€' : '¥';
 
+                const totalMonthly = (sums.monthly[primaryCurrency] || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+                const totalYearly = (sums.yearly[primaryCurrency] || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+                // 1. KPI Cards
+                let kpiHTML = '';
+                
+                // Card 1: Monthly
                 kpiHTML += `
-                <div class="snap-start min-w-[260px] flex-1 bg-surface-light dark:bg-surface-dark p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col justify-between">
+                <div class="snap-start min-w-[240px] flex-1 bg-surface-light dark:bg-surface-dark p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col justify-between">
                     <div class="flex justify-between items-start">
-                        <div class="w-10 h-10 rounded-full bg-red-50 dark:bg-red-900/20 flex items-center justify-center text-red-500">
-                            <span class="material-symbols-outlined">payments</span>
+                        <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                            <span class="material-symbols-outlined">calendar_view_month</span>
                         </div>
+                        <span class="text-xs font-bold bg-primary/10 text-primary px-2 py-1 rounded-md">월간 예상</span>
                     </div>
                     <div class="mt-4">
-                        <p class="text-slate-500 text-sm font-medium">월간 지출 (${primaryCurrency})</p>
-                        <p class="text-3xl font-bold tracking-tight">${symbol}${totalSpend}</p>
+                        <p class="text-slate-500 text-sm font-medium">이번 달 지출 (${primaryCurrency})</p>
+                        <p class="text-2xl font-bold tracking-tight mt-1">${symbol}${totalMonthly}</p>
                     </div>
                 </div>`;
                 
-                // Count Card
+                // Card 2: Yearly
                 kpiHTML += `
-                <div class="snap-start min-w-[160px] bg-surface-light dark:bg-surface-dark p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col justify-between">
-                    <div class="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-500">
-                        <span class="material-symbols-outlined">subscriptions</span>
+                <div class="snap-start min-w-[240px] flex-1 bg-surface-light dark:bg-surface-dark p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col justify-between">
+                    <div class="flex justify-between items-start">
+                        <div class="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-500">
+                            <span class="material-symbols-outlined">calendar_month</span>
+                        </div>
+                        <span class="text-xs font-bold bg-blue-50 dark:bg-blue-900/20 text-blue-500 px-2 py-1 rounded-md">연간 예상</span>
                     </div>
                     <div class="mt-4">
-                        <p class="text-slate-500 text-sm font-medium">구독 중</p>
-                        <p class="text-3xl font-bold tracking-tight">${activeCount}개</p>
+                        <p class="text-slate-500 text-sm font-medium">올해 총 지출 (${primaryCurrency})</p>
+                        <p class="text-2xl font-bold tracking-tight mt-1">${symbol}${totalYearly}</p>
+                    </div>
+                </div>`;
+                
+                // Card 3: Count (All)
+                kpiHTML += `
+                <div class="snap-start min-w-[160px] bg-surface-light dark:bg-surface-dark p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col justify-between">
+                    <div class="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-500">
+                        <span class="material-symbols-outlined">format_list_bulleted</span>
+                    </div>
+                    <div class="mt-4">
+                        <p class="text-slate-500 text-sm font-medium">전체 구독</p>
+                        <p class="text-2xl font-bold tracking-tight mt-1">${activeCount}개</p>
                     </div>
                 </div>`;
 

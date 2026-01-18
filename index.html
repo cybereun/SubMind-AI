@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="ko" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SubMind AI - 구독 관리 매니저</title>
+    
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#059467",
+                        "background-light": "#F8FAFC",
+                        "background-dark": "#0f231d",
+                        "surface-light": "#FFFFFF",
+                        "surface-dark": "#1E293B",
+                    },
+                    fontFamily: {
+                        "display": ["Manrope", "sans-serif"]
+                    }
+                },
+            },
+        }
+    </script>
+    <style>
+        body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; -webkit-tap-highlight-color: transparent; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom, 80px); }
+        /* Toast Animation */
+        @keyframes slideUpFade {
+            from { opacity: 0; transform: translate(-50%, 20px); }
+            to { opacity: 1; transform: translate(-50%, 0); }
+        }
+        .toast { animation: slideUpFade 0.3s ease-out forwards; }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen relative pb-28">
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div id="toast-container" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-[60] flex flex-col gap-2 w-max max-w-[90%] pointer-events-none"></div>
+
+    <!-- === VIEW: DASHBOARD (HOME) === -->
+    <div id="view-home" class="view-section">
+        <header class="sticky top-0 z-40 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-lg px-5 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white">
+                    <span class="material-symbols-outlined text-[20px]">smart_toy</span>
+                </div>
+                <h2 class="text-xl font-bold tracking-tight">SubMind AI</h2>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="app.exportData()" class="flex items-center justify-center w-10 h-10 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" title="JSON 내보내기">
+                    <span class="material-symbols-outlined text-[24px]">download</span>
+                </button>
+                <label for="import-file" class="flex items-center justify-center w-10 h-10 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer" title="JSON 가져오기">
+                    <span class="material-symbols-outlined text-[24px]">upload</span>
+                    <input type="file" id="import-file" class="hidden" accept=".json" onchange="app.importData(this)">
+                </label>
+            </div>
+        </header>
+
+        <section class="mt-4 px-5">
+            <div class="flex gap-4 overflow-x-auto pb-4 snap-x mandatory hide-scrollbar" id="kpi-container">
+                <!-- Rendered by JS -->
+            </div>
+        </section>
+
+        <main class="flex flex-col gap-6 px-5 mt-2">
+            <!-- Cleanup Card -->
+            <div id="cleanup-card" class="hidden bg-gradient-to-br from-primary/5 to-transparent dark:from-primary/20 dark:to-transparent border border-primary/20 rounded-2xl p-6 relative overflow-hidden">
+                <div class="flex items-start gap-4 relative z-10">
+                    <div class="bg-surface-light dark:bg-surface-dark p-2 rounded-xl shadow-sm shrink-0">
+                        <span class="material-symbols-outlined text-primary text-[28px]">auto_fix_high</span>
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="font-bold text-lg leading-tight">정리 대상 후보</h3>
+                        <p class="text-slate-500 dark:text-slate-400 text-sm mt-1 leading-relaxed" id="cleanup-text">
+                            사용하지 않는 것으로 보이는 구독이 감지되었습니다.
+                        </p>
+                        <button onclick="app.navTo('ai')" class="mt-4 bg-primary hover:bg-primary/90 text-white text-sm font-bold py-2.5 px-5 rounded-xl shadow-lg shadow-primary/20 transition-all flex items-center gap-2 w-full sm:w-auto justify-center">
+                            AI 제안 검토하기
+                            <span class="material-symbols-outlined text-sm">arrow_forward</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upcoming Payments -->
+            <div class="bg-surface-light dark:bg-surface-dark rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden">
+                <div class="p-5 pb-2">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-bold text-lg">다가오는 결제</h3>
+                    </div>
+                </div>
+                <div class="flex flex-col" id="upcoming-list">
+                    <!-- Rendered by JS -->
+                    <div class="p-8 text-center text-slate-400 text-sm">예정된 결제가 없습니다.</div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- === VIEW: SUBSCRIPTIONS (LIST/CRUD) === -->
+    <div id="view-subs" class="view-section hidden">
+        <header class="sticky top-0 z-40 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex items-center justify-between">
+            <h1 class="text-lg font-bold">내 구독 목록</h1>
+            <button onclick="app.openModal()" class="flex items-center justify-center px-3 py-1.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-bold">
+                <span class="material-symbols-outlined mr-1 text-sm">add</span>
+                <span class="text-sm">추가</span>
+            </button>
+        </header>
+
+        <main class="px-4 pb-24 mt-4">
+            <!-- Search -->
+            <div class="mb-4">
+                <label class="relative flex items-center w-full group">
+                    <span class="absolute left-4 text-slate-400 material-symbols-outlined">search</span>
+                    <input id="search-input" oninput="app.renderSubs()" class="w-full h-12 pl-12 pr-4 bg-white dark:bg-surface-dark rounded-xl border-none shadow-sm focus:ring-2 focus:ring-primary text-slate-900 dark:text-white placeholder-slate-400 font-medium" type="text" placeholder="구독 서비스 검색...">
+                </label>
+            </div>
+
+            <!-- Filters -->
+            <div class="flex gap-2 overflow-x-auto pb-4 hide-scrollbar mb-2">
+                <button onclick="app.setFilter('all')" class="filter-chip px-4 py-2 rounded-full text-sm font-medium shrink-0 shadow-sm transition-transform active:scale-95 bg-primary text-white">전체</button>
+                <button onclick="app.setFilter('Entertainment')" class="filter-chip px-4 py-2 rounded-full bg-white dark:bg-surface-dark border border-slate-100 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-medium shrink-0 shadow-sm">엔터테인먼트</button>
+                <button onclick="app.setFilter('Software')" class="filter-chip px-4 py-2 rounded-full bg-white dark:bg-surface-dark border border-slate-100 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-medium shrink-0 shadow-sm">소프트웨어</button>
+                <button onclick="app.setFilter('Utilities')" class="filter-chip px-4 py-2 rounded-full bg-white dark:bg-surface-dark border border-slate-100 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-medium shrink-0 shadow-sm">생활/유틸</button>
+            </div>
+
+            <!-- Sort Toggle -->
+            <div class="flex justify-between items-center px-1 mb-4">
+                <select id="sort-select" onchange="app.renderSubs()" class="bg-transparent text-sm font-medium text-slate-500 border-none focus:ring-0 cursor-pointer">
+                    <option value="date">정렬: 다음 결제일</option>
+                    <option value="price_desc">정렬: 높은 가격순</option>
+                    <option value="name">정렬: 이름순</option>
+                </select>
+                <p class="text-slate-500 dark:text-slate-400 text-sm font-medium" id="subs-total-display">합계: 0원/월</p>
+            </div>
+
+            <!-- List -->
+            <div class="flex flex-col gap-4" id="subs-list">
+                <!-- Rendered by JS -->
+            </div>
+        </main>
+    </div>
+
+    <!-- === VIEW: AI RECOMMENDATIONS === -->
+    <div id="view-ai" class="view-section hidden">
+        <header class="sticky top-0 z-40 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-sm p-4 border-b border-gray-200 dark:border-gray-800">
+            <h2 class="text-lg font-bold text-center">AI 인사이트</h2>
+        </header>
+
+        <main class="p-4 flex flex-col gap-6 pb-24">
+            <!-- API Key Input -->
+            <div class="bg-white dark:bg-surface-dark p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-bold">API 설정</h3>
+                    <span class="material-symbols-outlined text-gray-400 text-sm">lock</span>
+                </div>
+                <p class="text-xs text-slate-500 mb-3">분석을 위해 Google Gemini API 키를 입력하세요.</p>
+                <div class="relative mb-3">
+                    <input id="api-key-input" type="password" class="w-full rounded-xl border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-[#1a2c26] py-2 pl-3 pr-10 text-sm focus:ring-primary focus:border-primary" placeholder="API 키 입력">
+                    <button onclick="app.toggleKeyVis()" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <span class="material-symbols-outlined text-[18px]">visibility</span>
+                    </button>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="save-key-check" class="rounded text-primary focus:ring-primary border-gray-300">
+                    <label for="save-key-check" class="text-xs text-slate-600 dark:text-slate-400">로컬에 키 저장 (주의)</label>
+                </div>
+            </div>
+
+            <!-- User Context -->
+            <div class="flex flex-col gap-3">
+                <h3 class="font-bold">내 프로필</h3>
+                <input id="profile-job" type="text" class="w-full rounded-xl border-none shadow-sm bg-white dark:bg-surface-dark py-3 px-4 text-sm" placeholder="직업 (예: 디자이너)">
+                <input id="profile-goal" type="text" class="w-full rounded-xl border-none shadow-sm bg-white dark:bg-surface-dark py-3 px-4 text-sm" placeholder="목표 (예: 지출 20% 줄이기)">
+                <input id="profile-budget" type="number" class="w-full rounded-xl border-none shadow-sm bg-white dark:bg-surface-dark py-3 px-4 text-sm" placeholder="월 목표 예산 (원)">
+            </div>
+
+            <button onclick="app.callAI()" id="btn-analyze" class="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/20 flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
+                <span class="material-symbols-outlined">auto_awesome</span>
+                <span>AI 분석 시작하기</span>
+            </button>
+
+            <!-- Results Container -->
+            <div id="ai-results" class="flex flex-col gap-4 hidden">
+                <div class="flex items-center justify-between">
+                    <h3 class="font-bold">분석 결과</h3>
+                    <span class="bg-primary/10 text-primary text-xs font-bold px-2 py-1 rounded-md">New</span>
+                </div>
+                
+                <!-- Cleanup Section -->
+                <div class="rounded-xl bg-white dark:bg-surface-dark p-4 shadow-sm border border-red-100 dark:border-red-900/30">
+                    <div class="flex items-center gap-2 mb-3 text-red-500">
+                        <span class="material-symbols-outlined">delete_sweep</span>
+                        <span class="font-bold text-sm">정리 추천</span>
+                    </div>
+                    <div id="ai-cleanup-list" class="flex flex-col gap-2"></div>
+                </div>
+
+                <!-- Next Actions -->
+                <div class="rounded-xl bg-white dark:bg-surface-dark p-4 shadow-sm border border-blue-100 dark:border-blue-900/30">
+                    <div class="flex items-center gap-2 mb-3 text-blue-500">
+                        <span class="material-symbols-outlined">checklist</span>
+                        <span class="font-bold text-sm">실천 가이드</span>
+                    </div>
+                    <ul id="ai-actions-list" class="list-disc list-inside text-sm space-y-2 text-slate-700 dark:text-slate-300"></ul>
+                </div>
+
+                <!-- Recommendations -->
+                <div class="rounded-xl bg-gradient-to-br from-[#0f231d] to-[#1a2c26] text-white p-4 shadow-sm relative overflow-hidden">
+                    <div class="flex items-center gap-2 mb-3 relative z-10">
+                        <span class="material-symbols-outlined text-primary">recommend</span>
+                        <span class="font-bold text-sm">스마트 대안</span>
+                    </div>
+                    <div id="ai-recs-list" class="flex flex-col gap-2 relative z-10"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- === ADD/EDIT MODAL === -->
+    <div id="modal-add-edit" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="app.closeModal()"></div>
+        <div class="absolute bottom-0 sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-full max-w-md bg-background-light dark:bg-background-dark sm:rounded-3xl h-[85vh] sm:h-auto sm:max-h-[90vh] shadow-2xl flex flex-col transition-transform duration-300 translate-y-full sm:translate-y-0" id="modal-content">
+            
+            <!-- Modal Header -->
+            <header class="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-surface-dark rounded-t-3xl">
+                <button onclick="app.closeModal()" class="text-slate-500 font-medium">취소</button>
+                <h1 class="text-lg font-bold" id="modal-title">구독 추가</h1>
+                <button onclick="app.saveSubscription()" class="text-primary font-bold">저장</button>
+            </header>
+
+            <!-- Modal Form -->
+            <div class="flex-1 overflow-y-auto p-5 space-y-5 bg-background-light dark:bg-background-dark">
+                <input type="hidden" id="inp-id">
+                
+                <div class="space-y-2">
+                    <label class="block text-sm font-bold ml-1">서비스명</label>
+                    <div class="relative">
+                        <input id="inp-name" class="w-full h-12 pl-10 pr-4 rounded-2xl bg-white dark:bg-surface-dark border-none shadow-sm focus:ring-2 focus:ring-primary" placeholder="예: 넷플릭스" type="text" onchange="app.autoFillCategory(this.value)">
+                        <span class="absolute left-3 top-3 text-slate-400 material-symbols-outlined">search</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-2">
+                        <label class="block text-sm font-bold ml-1">금액</label>
+                        <input id="inp-price" class="w-full h-12 px-4 rounded-2xl bg-white dark:bg-surface-dark border-none shadow-sm focus:ring-2 focus:ring-primary font-bold" placeholder="0.00" type="number" step="0.01">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="block text-sm font-bold ml-1">통화</label>
+                        <select id="inp-currency" class="w-full h-12 px-4 rounded-2xl bg-white dark:bg-surface-dark border-none shadow-sm focus:ring-2 focus:ring-primary">
+                            <option value="KRW">KRW (원)</option>
+                            <option value="USD">USD ($)</option>
+                            <option value="EUR">EUR (€)</option>
+                            <option value="JPY">JPY (¥)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="block text-sm font-bold ml-1">결제 주기</label>
+                    <div class="bg-gray-200 dark:bg-black/20 p-1 rounded-2xl flex">
+                        <label class="flex-1 cursor-pointer">
+                            <input type="radio" name="billing_cycle" value="monthly" checked class="sr-only peer" onchange="app.toggleBillingCycle(this.value)">
+                            <div class="py-2 text-center rounded-xl text-sm font-bold text-slate-500 peer-checked:bg-white dark:peer-checked:bg-primary peer-checked:text-primary dark:peer-checked:text-white shadow-none peer-checked:shadow-sm transition-all">월간</div>
+                        </label>
+                        <label class="flex-1 cursor-pointer">
+                            <input type="radio" name="billing_cycle" value="yearly" class="sr-only peer" onchange="app.toggleBillingCycle(this.value)">
+                            <div class="py-2 text-center rounded-xl text-sm font-bold text-slate-500 peer-checked:bg-white dark:peer-checked:bg-primary peer-checked:text-primary dark:peer-checked:text-white shadow-none peer-checked:shadow-sm transition-all">연간</div>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="block text-sm font-bold ml-1">카테고리</label>
+                    <select id="inp-category" class="w-full h-12 px-4 rounded-2xl bg-white dark:bg-surface-dark border-none shadow-sm focus:ring-2 focus:ring-primary">
+                        <option value="Entertainment">엔터테인먼트</option>
+                        <option value="Software">소프트웨어</option>
+                        <option value="Utilities">생활/유틸리티</option>
+                        <option value="Health">건강/운동</option>
+                        <option value="Other">기타</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-2">
+                        <label class="block text-sm font-bold ml-1">첫 결제일</label>
+                        <input id="inp-start-date" class="w-full h-12 px-4 rounded-2xl bg-white dark:bg-surface-dark border-none shadow-sm focus:ring-2 focus:ring-primary bg-transparent" type="date">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="block text-sm font-bold ml-1">다음 결제일</label>
+                        <input id="inp-next-date" class="w-full h-12 px-4 rounded-2xl bg-white dark:bg-surface-dark border-none shadow-sm focus:ring-2 focus:ring-primary bg-transparent" type="date">
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="block text-sm font-bold ml-1">마지막 사용일 (선택)</label>
+                    <input id="inp-last-used" class="w-full h-12 px-4 rounded-2xl bg-white dark:bg-surface-dark border-none shadow-sm focus:ring-2 focus:ring-primary bg-transparent" type="date">
+                </div>
+
+                <!-- Delete Button (Only for Edit) -->
+                <button id="btn-delete" onclick="app.deleteSubscription()" class="w-full py-3 text-red-500 font-bold hover:bg-red-50 dark:hover:bg-red-900/10 rounded-xl transition-colors hidden">
+                    구독 삭제
+                </button>
+                <div class="h-12"></div> <!-- Spacer -->
+            </div>
+        </div>
+    </div>
+
+    <!-- === BOTTOM NAVIGATION === -->
+    <nav class="fixed bottom-0 left-0 w-full bg-surface-light/95 dark:bg-surface-dark/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 pb-safe pt-2 px-6 z-40 h-[80px]">
+        <div class="flex justify-between items-center h-full pb-2">
+            <button onclick="app.navTo('home')" class="nav-btn flex flex-col items-center gap-1 min-w-[64px] group text-primary" data-target="home">
+                <span class="material-symbols-outlined text-[28px]">dashboard</span>
+                <span class="text-[10px] font-bold">홈</span>
+            </button>
+            <button onclick="app.navTo('subs')" class="nav-btn flex flex-col items-center gap-1 min-w-[64px] group text-slate-400" data-target="subs">
+                <span class="material-symbols-outlined text-[28px]">credit_card</span>
+                <span class="text-[10px] font-bold">목록</span>
+            </button>
+            <button onclick="app.navTo('ai')" class="nav-btn flex flex-col items-center gap-1 min-w-[64px] group text-slate-400" data-target="ai">
+                <span class="material-symbols-outlined text-[28px]">psychology</span>
+                <span class="text-[10px] font-bold">AI 분석</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- === APPLICATION LOGIC === -->
+    <script>
+        const app = (() => {
+            // --- STATE & CONSTANTS ---
+            const STORE_KEY_SUBS = 'submind_subscriptions_v1';
+            const STORE_KEY_SETTINGS = 'submind_settings_v1';
+            
+            let state = {
+                subscriptions: [],
+                settings: {
+                    job: '',
+                    goal: '',
+                    budget: '',
+                    apiKey: '' // Loaded from local storage if saved
+                },
+                view: 'home',
+                filter: { category: 'all', search: '', sort: 'date' }
+            };
+
+            // --- UTILS ---
+            const $ = (id) => document.getElementById(id);
+            const uuid = () => crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
+            const formatDate = (d) => {
+                if(!d) return '';
+                const date = new Date(d);
+                return `${date.getFullYear()}.${String(date.getMonth()+1).padStart(2,'0')}.${String(date.getDate()).padStart(2,'0')}`;
+            };
+            const daysBetween = (d1, d2) => Math.ceil((new Date(d1) - new Date(d2)) / (1000 * 60 * 60 * 24));
+            
+            // --- STORAGE ---
+            const loadData = () => {
+                try {
+                    const subs = localStorage.getItem(STORE_KEY_SUBS);
+                    const sett = localStorage.getItem(STORE_KEY_SETTINGS);
+                    if (subs) state.subscriptions = JSON.parse(subs);
+                    if (sett) state.settings = { ...state.settings, ...JSON.parse(sett) };
+                    
+                    // Session storage for key if not saved locally
+                    const sessionKey = sessionStorage.getItem('submind_api_key');
+                    if (sessionKey && !state.settings.apiKey) state.settings.apiKey = sessionKey;
+
+                } catch (e) { console.error("Load failed", e); showToast("데이터 로드 오류", "error"); }
+            };
+
+            const saveData = () => {
+                localStorage.setItem(STORE_KEY_SUBS, JSON.stringify(state.subscriptions));
+                // Only save key if check is true (handled in specific function), otherwise save other settings
+                const settingsToSave = { ...state.settings };
+                if (!$('save-key-check').checked) delete settingsToSave.apiKey; 
+                localStorage.setItem(STORE_KEY_SETTINGS, JSON.stringify(settingsToSave));
+                render();
+            };
+
+            // --- NAVIGATION & UI ---
+            const navTo = (viewId) => {
+                state.view = viewId;
+                document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+                $(`view-${viewId}`).classList.remove('hidden');
+                
+                // Update Nav Active State
+                document.querySelectorAll('.nav-btn').forEach(btn => {
+                    if (btn.dataset.target === viewId) {
+                        btn.classList.remove('text-slate-400');
+                        btn.classList.add('text-primary');
+                    } else {
+                        btn.classList.add('text-slate-400');
+                        btn.classList.remove('text-primary');
+                    }
+                });
+                render();
+            };
+
+            const showToast = (msg, type = 'success') => {
+                const toast = document.createElement('div');
+                toast.className = `toast px-4 py-2 rounded-full text-white text-sm font-bold shadow-lg flex items-center gap-2 pointer-events-auto ${type === 'error' ? 'bg-red-500' : 'bg-slate-800'}`;
+                toast.innerHTML = `<span>${msg}</span>`;
+                $('toast-container').appendChild(toast);
+                setTimeout(() => toast.remove(), 3000);
+            };
+
+            const toggleKeyVis = () => {
+                const inp = $('api-key-input');
+                inp.type = inp.type === 'password' ? 'text' : 'password';
+            };
+
+            // --- RENDERERS ---
+            const render = () => {
+                if (state.view === 'home') renderDashboard();
+                if (state.view === 'subs') renderSubs();
+                if (state.view === 'ai') renderAIInit();
+            };
+
+            const renderDashboard = () => {
+                const subs = state.subscriptions;
+                // Calculations
+                const sums = {};
+                let activeCount = 0;
+                subs.forEach(s => {
+                    const price = parseFloat(s.price) || 0;
+                    const currency = s.currency || 'USD';
+                    if (!sums[currency]) sums[currency] = 0;
+                    
+                    let monthlyPrice = s.billingCycle === 'yearly' ? price / 12 : price;
+                    sums[currency] += monthlyPrice;
+                    activeCount++;
+                });
+
+                // 1. KPI Cards
+                let kpiHTML = '';
+                // Spend Card
+                const primaryCurrency = Object.keys(sums)[0] || 'KRW';
+                const totalSpend = (sums[primaryCurrency] || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+                const symbol = primaryCurrency === 'KRW' ? '₩' : primaryCurrency === 'USD' ? '$' : primaryCurrency === 'EUR' ? '€' : '¥';
+
+                kpiHTML += `
+                <div class="snap-start min-w-[260px] flex-1 bg-surface-light dark:bg-surface-dark p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col justify-between">
+                    <div class="flex justify-between items-start">
+                        <div class="w-10 h-10 rounded-full bg-red-50 dark:bg-red-900/20 flex items-center justify-center text-red-500">
+                            <span class="material-symbols-outlined">payments</span>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <p class="text-slate-500 text-sm font-medium">월간 지출 (${primaryCurrency})</p>
+                        <p class="text-3xl font-bold tracking-tight">${symbol}${totalSpend}</p>
+                    </div>
+                </div>`;
+                
+                // Count Card
+                kpiHTML += `
+                <div class="snap-start min-w-[160px] bg-surface-light dark:bg-surface-dark p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col justify-between">
+                    <div class="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-500">
+                        <span class="material-symbols-outlined">subscriptions</span>
+                    </div>
+                    <div class="mt-4">
+                        <p class="text-slate-500 text-sm font-medium">구독 중</p>
+                        <p class="text-3xl font-bold tracking-tight">${activeCount}개</p>
+                    </div>
+                </div>`;
+
+                $('kpi-container').innerHTML = kpiHTML;
+
+                // 2. Cleanup Logic
+                const today = new Date();
+                const unused = subs.filter(s => {
+                    if (!s.lastUsedDate) return false;
+                    return daysBetween(today, s.lastUsedDate) > 60;
+                });
+                if (unused.length > 0) {
+                    $('cleanup-card').classList.remove('hidden');
+                    $('cleanup-text').innerHTML = `60일 이상 사용하지 않은 구독 <span class="font-bold text-primary">${unused.length}개</span>(예: ${unused[0].name})를 발견했습니다.`;
+                } else {
+                    $('cleanup-card').classList.add('hidden');
+                }
+
+                // 3. Upcoming
+                const upcoming = subs
+                    .filter(s => s.nextBillingDate && new Date(s.nextBillingDate) >= today)
+                    .sort((a, b) => new Date(a.nextBillingDate) - new Date(b.nextBillingDate))
+                    .slice(0, 5);
+                
+                const listEl = $('upcoming-list');
+                if (upcoming.length === 0) {
+                    listEl.innerHTML = '<div class="p-6 text-center text-slate-400 text-sm">예정된 결제가 없습니다.</div>';
+                } else {
+                    listEl.innerHTML = upcoming.map(s => {
+                        const daysLeft = daysBetween(s.nextBillingDate, today);
+                        let dateText = daysLeft === 0 ? '오늘' : daysLeft === 1 ? '내일' : `${daysLeft}일 후`;
+                        const cycleText = s.billingCycle === 'monthly' ? '월간' : '연간';
+                        return `
+                        <div class="flex items-center justify-between p-4 px-5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-800/50 last:border-0">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-xl bg-gray-200 dark:bg-slate-700 flex items-center justify-center font-bold text-lg text-slate-500">
+                                    ${s.name.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                    <p class="font-bold text-base">${s.name}</p>
+                                    <p class="text-slate-400 text-xs font-medium">${cycleText} • <span class="${daysLeft < 3 ? 'text-red-500 font-bold' : ''}">${dateText}</span></p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="font-bold text-base">${s.currency === 'USD' ? '$' : ''}${s.price} <span class="text-xs font-normal text-slate-400">${s.currency}</span></p>
+                            </div>
+                        </div>`;
+                    }).join('');
+                }
+            };
+
+            const categoryMap = {
+                'Entertainment': '엔터테인먼트',
+                'Software': '소프트웨어',
+                'Utilities': '생활/유틸',
+                'Health': '건강/운동',
+                'Other': '기타'
+            };
+
+            const renderSubs = () => {
+                let list = [...state.subscriptions];
+                const search = $('search-input').value.toLowerCase();
+                const filter = state.filter.category; // Simple single filter for now in UI logic
+                const sort = $('sort-select').value;
+
+                // Filter
+                if (search) list = list.filter(s => s.name.toLowerCase().includes(search));
+                if (state.filter.category !== 'all') list = list.filter(s => s.category === state.filter.category);
+
+                // Sort
+                if (sort === 'date') list.sort((a, b) => new Date(a.nextBillingDate || '9999-12-31') - new Date(b.nextBillingDate || '9999-12-31'));
+                if (sort === 'price_desc') list.sort((a, b) => b.price - a.price);
+                if (sort === 'name') list.sort((a, b) => a.name.localeCompare(b.name));
+
+                // Render
+                const container = $('subs-list');
+                if (list.length === 0) {
+                    container.innerHTML = '<div class="text-center mt-10 text-slate-400">구독 내역이 없습니다.</div>';
+                    return;
+                }
+
+                container.innerHTML = list.map(s => {
+                    const catName = categoryMap[s.category] || s.category;
+                    return `
+                    <div class="bg-white dark:bg-surface-dark p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col gap-3 group cursor-pointer" onclick="app.editSubscription('${s.id}')">
+                        <div class="flex items-start justify-between">
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 rounded-xl bg-gray-100 dark:bg-slate-700 flex items-center justify-center font-bold text-xl text-slate-600 dark:text-slate-300">
+                                    ${s.name.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                    <h3 class="font-bold text-base">${s.name}</h3>
+                                    <p class="text-slate-500 dark:text-slate-400 text-xs">${catName}</p>
+                                </div>
+                            </div>
+                            <div class="flex flex-col items-end">
+                                <span class="font-bold text-base">${s.currency} ${s.price}</span>
+                                <span class="text-slate-400 text-xs">/${s.billingCycle === 'monthly' ? '월' : '년'}</span>
+                            </div>
+                        </div>
+                        <div class="w-full h-px bg-slate-100 dark:bg-slate-700"></div>
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="flex h-2 w-2 rounded-full ${s.billingCycle === 'monthly' ? 'bg-primary' : 'bg-orange-400'}"></span>
+                                <p class="text-slate-600 dark:text-slate-300 text-xs font-medium">다음 결제: ${formatDate(s.nextBillingDate)}</p>
+                            </div>
+                            <span class="material-symbols-outlined text-[20px] text-slate-300">edit</span>
+                        </div>
+                    </div>
+                    `
+                }).join('');
+                
+                // Update total text
+                // Simple total calculation for display purposes
+                // Note: Mixing currencies is complex, this is a simplified view showing sum of numbers regardless of currency if multiple exist, or just primary
+                const total = list.reduce((acc, curr) => acc + parseFloat(curr.price), 0); 
+                // A better approach for display might be to just show count or major currency
+                $('subs-total-display').innerText = `표시 합계: ${total.toLocaleString()}`;
+            };
+
+            const setFilter = (cat) => {
+                state.filter.category = cat;
+                document.querySelectorAll('.filter-chip').forEach(el => {
+                    const btnText = el.innerText;
+                    // Logic to match Korean label back to category ID or check based on `onclick` attribute
+                    // Simplified: just check if the function call matches
+                    if (el.getAttribute('onclick').includes(`'${cat}'`)) {
+                        el.classList.remove('bg-white', 'text-slate-600', 'border');
+                        el.classList.add('bg-primary', 'text-white');
+                    } else {
+                        el.classList.add('bg-white', 'text-slate-600', 'border');
+                        el.classList.remove('bg-primary', 'text-white');
+                    }
+                });
+                renderSubs();
+            };
+
+            const renderAIInit = () => {
+                if (state.settings.apiKey) $('api-key-input').value = state.settings.apiKey;
+                if (state.settings.apiKey && $('save-key-check')) $('save-key-check').checked = true;
+                $('profile-job').value = state.settings.job || '';
+                $('profile-goal').value = state.settings.goal || '';
+                $('profile-budget').value = state.settings.budget || '';
+            };
+
+            // --- CRUD OPERATIONS ---
+            const openModal = () => {
+                $('inp-id').value = '';
+                $('inp-name').value = '';
+                $('inp-price').value = '';
+                $('inp-start-date').value = new Date().toISOString().split('T')[0];
+                $('inp-next-date').value = '';
+                $('inp-last-used').value = '';
+                $('btn-delete').classList.add('hidden');
+                $('modal-title').innerText = '구독 추가';
+                $('modal-add-edit').classList.remove('hidden');
+                // Animation
+                setTimeout(() => $('modal-content').classList.remove('translate-y-full'), 10);
+            };
+
+            const closeModal = () => {
+                $('modal-content').classList.add('translate-y-full');
+                setTimeout(() => $('modal-add-edit').classList.add('hidden'), 300);
+            };
+
+            const editSubscription = (id) => {
+                const s = state.subscriptions.find(x => x.id === id);
+                if (!s) return;
+                $('inp-id').value = s.id;
+                $('inp-name').value = s.name;
+                $('inp-price').value = s.price;
+                $('inp-currency').value = s.currency;
+                $('inp-category').value = s.category;
+                $('inp-start-date').value = s.startDate;
+                $('inp-next-date').value = s.nextBillingDate;
+                $('inp-last-used').value = s.lastUsedDate || '';
+                
+                // Radio buttons
+                const radios = document.getElementsByName('billing_cycle');
+                radios.forEach(r => r.checked = (r.value === s.billingCycle));
+
+                $('modal-title').innerText = '구독 수정';
+                $('btn-delete').classList.remove('hidden');
+                $('modal-add-edit').classList.remove('hidden');
+                setTimeout(() => $('modal-content').classList.remove('translate-y-full'), 10);
+            };
+
+            const saveSubscription = () => {
+                const id = $('inp-id').value;
+                const name = $('inp-name').value;
+                const price = $('inp-price').value;
+                const nextDate = $('inp-next-date').value;
+
+                if (!name || !price || !nextDate) {
+                    showToast("서비스명, 금액, 다음 결제일은 필수입니다.", "error");
+                    return;
+                }
+
+                const sub = {
+                    id: id || uuid(),
+                    name,
+                    price,
+                    currency: $('inp-currency').value,
+                    billingCycle: document.querySelector('input[name="billing_cycle"]:checked').value,
+                    category: $('inp-category').value,
+                    startDate: $('inp-start-date').value,
+                    nextBillingDate: nextDate,
+                    lastUsedDate: $('inp-last-used').value
+                };
+
+                if (id) {
+                    const idx = state.subscriptions.findIndex(x => x.id === id);
+                    if (idx > -1) state.subscriptions[idx] = sub;
+                } else {
+                    state.subscriptions.push(sub);
+                }
+
+                saveData();
+                closeModal();
+                showToast("구독이 저장되었습니다!");
+                render(); // Refresh all views
+            };
+
+            const deleteSubscription = () => {
+                if(!confirm("정말 이 구독을 삭제하시겠습니까?")) return;
+                const id = $('inp-id').value;
+                state.subscriptions = state.subscriptions.filter(x => x.id !== id);
+                saveData();
+                closeModal();
+                showToast("구독이 삭제되었습니다.");
+                render();
+            };
+
+            const autoFillCategory = (name) => {
+                name = name.toLowerCase();
+                const sel = $('inp-category');
+                if (name.includes('netflix') || name.includes('youtube') || name.includes('disney') || name.includes('watcha') || name.includes('melon')) sel.value = 'Entertainment';
+                if (name.includes('adobe') || name.includes('microsoft') || name.includes('gpt') || name.includes('notion')) sel.value = 'Software';
+                if (name.includes('gym') || name.includes('fitness') || name.includes('pilates')) sel.value = 'Health';
+            };
+
+            // --- AI LOGIC ---
+            const callAI = async () => {
+                const key = $('api-key-input').value;
+                if (!key) {
+                    showToast("API 키가 필요합니다.", "error");
+                    return;
+                }
+
+                // Save profile inputs
+                state.settings.job = $('profile-job').value;
+                state.settings.goal = $('profile-goal').value;
+                state.settings.budget = $('profile-budget').value;
+                
+                // Handle Key Storage
+                if ($('save-key-check').checked) {
+                    state.settings.apiKey = key;
+                } else {
+                    state.settings.apiKey = '';
+                    sessionStorage.setItem('submind_api_key', key);
+                }
+                saveData();
+
+                // UI Loading
+                const btn = $('btn-analyze');
+                const originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = `<span class="material-symbols-outlined animate-spin">refresh</span> 분석 중...`;
+
+                try {
+                    const subsData = state.subscriptions.map(s => `${s.name} (${s.category}, ${s.price} ${s.currency}/${s.billingCycle})`).join(', ');
+                    
+                    const prompt = `
+                    Act as a financial advisor speaking Korean.
+                    User Profile: Job: ${state.settings.job}, Goal: ${state.settings.goal}, Monthly Budget: ${state.settings.budget}.
+                    Current Subscriptions: ${subsData}.
+                    
+                    Analyze this list. Identify unused or duplicate services. Suggest cleaner alternatives or bundle deals.
+                    
+                    Return STRICTLY valid JSON with this structure (no markdown code blocks, and ALL TEXT VALUES MUST BE IN KOREAN):
+                    {
+                      "recommendations": [{"name": "string", "why": "string", "priceHint": "string"}],
+                      "cleanup": [{"name": "string", "why": "string"}],
+                      "nextActions": ["string"]
+                    }
+                    `;
+
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${key}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                    });
+
+                    const data = await response.json();
+                    
+                    if (data.error) throw new Error(data.error.message);
+
+                    let rawText = data.candidates[0].content.parts[0].text;
+                    // Clean markdown if present
+                    rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+                    
+                    const json = JSON.parse(rawText);
+                    renderAIResults(json);
+
+                } catch (e) {
+                    console.error(e);
+                    showToast("AI 분석 실패. API 키를 확인하세요.", "error");
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+            };
+
+            const renderAIResults = (data) => {
+                $('ai-results').classList.remove('hidden');
+                
+                // Cleanup
+                $('ai-cleanup-list').innerHTML = data.cleanup.map(c => `
+                    <div class="flex items-center justify-between p-3 bg-red-50/50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-900/30">
+                        <div class="flex flex-col">
+                            <span class="text-sm font-bold text-slate-900 dark:text-slate-100">${c.name}</span>
+                            <span class="text-xs text-red-500 font-medium">${c.why}</span>
+                        </div>
+                    </div>
+                `).join('');
+
+                // Actions
+                $('ai-actions-list').innerHTML = data.nextActions.map(a => `<li>${a}</li>`).join('');
+
+                // Recs
+                $('ai-recs-list').innerHTML = data.recommendations.map(r => `
+                    <div class="flex items-center justify-between bg-white/10 backdrop-blur-sm p-3 rounded-lg border border-white/10">
+                        <div>
+                            <p class="text-sm font-bold">${r.name}</p>
+                            <p class="text-xs text-gray-300">${r.why}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-sm font-bold">${r.priceHint}</p>
+                        </div>
+                    </div>
+                `).join('');
+            };
+
+            // --- IMPORT / EXPORT ---
+            const exportData = () => {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
+                    subscriptions: state.subscriptions,
+                    settings: state.settings
+                }));
+                const dlAnchorElem = document.createElement('a');
+                dlAnchorElem.setAttribute("href", dataStr);
+                dlAnchorElem.setAttribute("download", "submind_backup.json");
+                document.body.appendChild(dlAnchorElem);
+                dlAnchorElem.click();
+                dlAnchorElem.remove();
+            };
+
+            const importData = (input) => {
+                const file = input.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const json = JSON.parse(e.target.result);
+                        if (json.subscriptions) state.subscriptions = json.subscriptions;
+                        if (json.settings) state.settings = json.settings;
+                        saveData();
+                        showToast("데이터를 성공적으로 가져왔습니다!");
+                        render();
+                    } catch (err) {
+                        showToast("유효하지 않은 JSON 파일입니다.", "error");
+                    }
+                };
+                reader.readAsText(file);
+                input.value = ''; // Reset
+            };
+
+            // Init
+            loadData();
+            render();
+
+            return {
+                navTo, renderSubs, setFilter, openModal, closeModal, 
+                saveSubscription, deleteSubscription, editSubscription,
+                toggleKeyVis, callAI, exportData, importData, autoFillCategory, toggleBillingCycle: () => {}
+            };
+        })();
+    </script>
+</body>
+</html>
